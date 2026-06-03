@@ -105,11 +105,12 @@ def parse_pptx(
                     if text:
                         slide_body.append(text)
 
-        # Parent chunk for this slide
+        # Parent chunk for this slide — must be appended BEFORE children
         all_text = (slide_title + "\n" + "\n".join(slide_body)).strip()
         if not all_text:
             continue
 
+        # Append parent first
         chunks.append(RawChunk(
             chunk_id           = parent_id,
             parent_id          = "",
@@ -128,7 +129,7 @@ def parse_pptx(
             content            = all_text,
         ))
 
-        # Slide title as heading child
+        # Then children (title heading + body paragraphs)
         if slide_title:
             chunks.append(RawChunk(
                 chunk_id           = str(uuid4()),

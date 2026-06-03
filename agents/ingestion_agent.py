@@ -232,8 +232,6 @@ async def sharepoint_webhook(
 
         # Get drive id
         try:
-            drive_info = await graph_client._headers()  # just to warm token
-            # Get root drive
             import httpx
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
@@ -253,7 +251,15 @@ async def sharepoint_webhook(
         _delta_tokens[delta_key] = new_token
 
         # Determine domain from site or default
-        domain = "hr"  # TODO: map site_id → domain via config
+        # Map site_id → domain via SITE_DOMAIN_MAP env var or default to 'hr'
+        # Format in .env: SITE_DOMAIN_MAP=site-id-1:hr,site-id-2:legal,site-id-3:it
+        import os
+        site_map = {}
+        for pair in os.getenv("SITE_DOMAIN_MAP", "").split(","):
+            if ":" in pair:
+                k, v = pair.strip().split(":", 1)
+                site_map[k.strip()] = v.strip()
+        domain = site_map.get(site_id, "hr")
 
         for item in changed_items:
             is_delete = "deleted" in item

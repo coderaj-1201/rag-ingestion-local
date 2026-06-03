@@ -137,28 +137,31 @@ def parse_xlsx(
             ))
 
         # Parent chunk — sheet-level summary
-        sheet_content = f"Sheet: {sheet_name}. " + (
-            chunks[-1].content if chunks else "No data."
+        # Build children list for this sheet (already appended above)
+        sheet_children = [c for c in chunks if c.parent_id == parent_id]
+        sheet_content  = f"Sheet: {sheet_name}. " + (
+            sheet_children[0].content if sheet_children else "No data."
         )
-        chunks.insert(-len([c for c in chunks if c.parent_id == parent_id]),
-            RawChunk(
-                chunk_id           = parent_id,
-                parent_id          = "",
-                chunk_type         = ChunkType.HEADING,
-                domain             = domain,
-                doc_name           = doc_name,
-                source             = doc_name,
-                doc_url            = doc_url,
-                file_type          = "xlsx",
-                blob_path          = blob_path,
-                ingested_at        = ingested_at,
-                page_number        = 0,
-                title              = doc_title,
-                section_heading    = sheet_name,
-                section_subheading = "",
-                content            = sheet_content,
-            )
+        parent_chunk = RawChunk(
+            chunk_id           = parent_id,
+            parent_id          = "",
+            chunk_type         = ChunkType.HEADING,
+            domain             = domain,
+            doc_name           = doc_name,
+            source             = doc_name,
+            doc_url            = doc_url,
+            file_type          = "xlsx",
+            blob_path          = blob_path,
+            ingested_at        = ingested_at,
+            page_number        = 0,
+            title              = doc_title,
+            section_heading    = sheet_name,
+            section_subheading = "",
+            content            = sheet_content,
         )
+        # Insert parent before its children so ordering is parent → children
+        insert_at = len(chunks) - len(sheet_children)
+        chunks.insert(insert_at, parent_chunk)
 
     logger.info("XLSX parsed: %s → %d chunks", doc_name, len(chunks))
     return chunks
