@@ -1,6 +1,7 @@
 """
 Azure client factories for the ingestion pipeline.
-Local dev: AzureCliCredential for Foundry, API keys for Search + DI + Blob.
+- Foundry + Blob + Service Bus: fully keyless (Managed Identity / CLI)
+- Document Intelligence + AI Search: API key (keyless not universally available for DI)
 """
 from __future__ import annotations
 
@@ -53,11 +54,7 @@ def get_document_intelligence_client() -> DocumentIntelligenceClient:
 
 @lru_cache(maxsize=1)
 def get_blob_service_client() -> BlobServiceClient:
-    if os.getenv("RUNNING_IN_AZURE"):
-        return BlobServiceClient(
-            account_url=f"https://{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
-            credential=_credential(),
-        )
+    """Sync blob client for non-async contexts. Use AsyncBlobClient directly in agents."""
     return BlobServiceClient(
         account_url=f"https://{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
         credential=_credential(),
@@ -86,12 +83,17 @@ def get_search_index_client() -> SearchIndexClient:
 
 
 def get_service_bus_client() -> ServiceBusClient:
-    """New instance per use — context manager."""
+    """New instance per use — context manager. Prefers keyless auth."""
+    if os.getenv("RUNNING_IN_AZURE"):
+        return ServiceBusClient(
+            fully_qualified_namespace=settings.AZURE_SERVICE_BUS_NAMESPACE,
+            credential=ManagedIdentityCredential(),
+        )
     if settings.AZURE_SERVICE_BUS_CONNECTION_STR:
         return ServiceBusClient.from_connection_string(
             settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
         )
     return ServiceBusClient(
         fully_qualified_namespace=settings.AZURE_SERVICE_BUS_NAMESPACE,
-        credential=_credential(),
+        credential=AzureCliCredential(),
     )

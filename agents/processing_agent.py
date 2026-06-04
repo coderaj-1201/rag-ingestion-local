@@ -155,19 +155,15 @@ async def _sb_listener():
                 ManagedIdentityCredential() if os.getenv("RUNNING_IN_AZURE")
                 else AzureCliCredential()
             )
-            conn_str = (
-                settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
-                if settings.AZURE_SERVICE_BUS_CONNECTION_STR
-                else None
-            )
-            sb = (
-                AsyncSBClient.from_connection_string(conn_str)
-                if conn_str
-                else AsyncSBClient(
+            if settings.AZURE_SERVICE_BUS_CONNECTION_STR:
+                sb = AsyncSBClient.from_connection_string(
+                    settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
+                )
+            else:
+                sb = AsyncSBClient(
                     fully_qualified_namespace=settings.AZURE_SERVICE_BUS_NAMESPACE,
                     credential=credential,
                 )
-            )
             async with sb:
                 async with sb.get_queue_receiver(
                     settings.SB_QUEUE_PROCESSING, max_wait_time=30

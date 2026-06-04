@@ -139,11 +139,13 @@ async def delete_from_search(doc_name: str) -> int:
     search  = get_search_client()
     deleted = 0
 
-    # Fetch all chunk ids for this doc_name
+    # Fetch all chunk ids for this doc_name.
+    # Escape single quotes in OData filter to prevent injection.
+    safe_doc_name = doc_name.replace("'", "''")
     results = await asyncio.to_thread(
         search.search,
         search_text="*",
-        filter=f"doc_name eq '{doc_name}'",
+        filter=f"doc_name eq '{safe_doc_name}'",
         select=["id"],
         top=1000,
     )
@@ -234,23 +236,19 @@ async def _sb_listener():
 
     while True:
         try:
-            conn_str = (
-                settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
-                if settings.AZURE_SERVICE_BUS_CONNECTION_STR
-                else None
-            )
             credential = (
                 ManagedIdentityCredential() if os.getenv("RUNNING_IN_AZURE")
                 else AzureCliCredential()
             )
-            sb = (
-                AsyncSBClient.from_connection_string(conn_str)
-                if conn_str
-                else AsyncSBClient(
+            if settings.AZURE_SERVICE_BUS_CONNECTION_STR:
+                sb = AsyncSBClient.from_connection_string(
+                    settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
+                )
+            else:
+                sb = AsyncSBClient(
                     fully_qualified_namespace=settings.AZURE_SERVICE_BUS_NAMESPACE,
                     credential=credential,
                 )
-            )
             async with sb:
                 async with sb.get_queue_receiver(
                     settings.SB_QUEUE_EMBEDDING, max_wait_time=30

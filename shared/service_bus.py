@@ -3,30 +3,30 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict
+import os
 
 from azure.servicebus import ServiceBusMessage
-
-from shared.azure_clients import get_service_bus_client
 
 logger = logging.getLogger(__name__)
 
 
 async def send_to_queue(queue_name: str, payload: dict, correlation_id: str = "") -> None:
-    """Send a single JSON message to a Service Bus queue."""
+    """Send a single JSON message to a Service Bus queue. Always uses Managed Identity in Azure."""
     import asyncio
     from azure.servicebus.aio import ServiceBusClient as AsyncSBClient
-
     from shared.config import settings
 
-    conn_str = (
-        settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
-        if settings.AZURE_SERVICE_BUS_CONNECTION_STR
-        else None
-    )
-
-    if conn_str:
-        sb = AsyncSBClient.from_connection_string(conn_str)
+    if os.getenv("RUNNING_IN_AZURE"):
+        from azure.identity.aio import ManagedIdentityCredential
+        credential = ManagedIdentityCredential()
+        sb = AsyncSBClient(
+            fully_qualified_namespace=settings.AZURE_SERVICE_BUS_NAMESPACE,
+            credential=credential,
+        )
+    elif settings.AZURE_SERVICE_BUS_CONNECTION_STR:
+        sb = AsyncSBClient.from_connection_string(
+            settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
+        )
     else:
         from azure.identity.aio import AzureCliCredential
         sb = AsyncSBClient(

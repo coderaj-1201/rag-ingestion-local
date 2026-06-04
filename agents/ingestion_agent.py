@@ -215,6 +215,15 @@ async def sharepoint_webhook(
     # Use delta API to get actual changed items per subscription/site
     tasks: list[IngestionTask] = []
 
+    # Build site → domain map once per request (not per notification)
+    # Format in .env: SITE_DOMAIN_MAP=site-id-1:hr,site-id-2:legal,site-id-3:it
+    import os
+    site_map: dict[str, str] = {}
+    for pair in os.getenv("SITE_DOMAIN_MAP", "").split(","):
+        if ":" in pair:
+            k, v = pair.strip().split(":", 1)
+            site_map[k.strip()] = v.strip()
+
     for notification in body.get("value", []):
         resource    = notification.get("resource", "")
         site_id     = settings.SHAREPOINT_DEFAULT_SITE_ID
@@ -250,15 +259,6 @@ async def sharepoint_webhook(
         changed_items, new_token = await graph_client.get_changed_items(site_id, drive_id, delta_token)
         _delta_tokens[delta_key] = new_token
 
-        # Determine domain from site or default
-        # Map site_id → domain via SITE_DOMAIN_MAP env var or default to 'hr'
-        # Format in .env: SITE_DOMAIN_MAP=site-id-1:hr,site-id-2:legal,site-id-3:it
-        import os
-        site_map = {}
-        for pair in os.getenv("SITE_DOMAIN_MAP", "").split(","):
-            if ":" in pair:
-                k, v = pair.strip().split(":", 1)
-                site_map[k.strip()] = v.strip()
         domain = site_map.get(site_id, "hr")
 
         for item in changed_items:
