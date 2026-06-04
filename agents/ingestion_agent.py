@@ -40,6 +40,7 @@ from shared.graph_client import graph_client
 from shared.logging_config import configure_logging, get_logger
 from shared.models import (
     IngestionTask,
+    LocalIngestRequest,
     ManualIngestRequest,
     ProcessingTask,
     TriggerType,
@@ -313,6 +314,102 @@ async def renew_webhook(subscription_id: str) -> dict:
     """Renew an expiring webhook subscription."""
     sub = await graph_client.renew_subscription(subscription_id)
     return {"subscription_id": sub["id"], "expires": sub["expirationDateTime"]}
+
+
+
+@app.post("/ingest/local")
+async def ingest_local(req: LocalIngestRequest) -> dict:
+    """
+    LOCAL DEV ONLY — ingest files from a folder on your laptop.
+    Reads files directly from disk, uploads to Blob, then queues through
+    the normal Processing → Embedding pipeline.
+
+    POST body: {"folder_path": "/absolute/or/relative/path", "domain": "hr", "recursive": true}
+    """
+    import os
+    from pathlib import Path
+
+    folder = Path(req.folder_path).expanduser().resolve()
+    if not folder.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Folder not found: {folder}")
+
+    pattern = "**/*" if req.recursive else "*"
+    all_files = [
+        f for f in folder.glob(pattern)
+        if f.is_file() and f.suffix.lower() in _SUPPORTED_EXTENSIONS
+    ]
+
+    if not all_files:
+        return {"status": "no_supported_files", "folder": str(folder), "total": 0}
+
+    logger.info(
+        "Local ingest: found %d files in %s (domain=%s)",
+        len(all_files), folder, req.domain,
+    )
+
+    tasks = []
+    for file_path in all_files:
+        doc_name  = file_path.name
+        file_type = file_path.suffix.lstrip(".")
+        blob_path = f"{req.domain}/{doc_name}"
+
+        task = IngestionTask(
+            domain       = req.domain,
+            file_type    = file_type,
+            doc_name     = doc_name,
+            doc_url      = file_path.as_uri(),   # file:// URI for local traceability
+            blob_path    = blob_path,
+            site_id      = "",
+            drive_id     = "",
+            item_id      = str(file_path),       # store full local path for download step
+            trigger_type = TriggerType.MANUAL,
+            is_delete    = False,
+        )
+        tasks.append(task)
+
+    # Fan-out: read from disk + upload to Blob + queue ProcessingTask
+    semaphore = asyncio.Semaphore(5)   # limit concurrent disk reads
+
+    async def _ingest_local_file(task: IngestionTask) -> ProcessingTask | Exception:
+        async with semaphore:
+            try:
+                file_bytes = Path(task.item_id).read_bytes()
+                await _upload_to_blob(task.blob_path, file_bytes)
+
+                processing_task = ProcessingTask(
+                    ingestion_task_id   = task.task_id,
+                    domain              = task.domain,
+                    doc_name            = task.doc_name,
+                    doc_url             = task.doc_url,
+                    file_type           = task.file_type,
+                    processed_blob_path = "",
+                    is_delete           = False,
+                )
+                from dataclasses import asdict
+                await send_to_queue(
+                    settings.SB_QUEUE_PROCESSING,
+                    asdict(processing_task),
+                    correlation_id=task.task_id,
+                )
+                logger.info("Queued local file: %s", task.doc_name)
+                return processing_task
+            except Exception as exc:
+                logger.error("Failed to ingest %s: %s", task.doc_name, exc)
+                return exc
+
+    results  = await asyncio.gather(*[_ingest_local_file(t) for t in tasks])
+    success  = sum(1 for r in results if not isinstance(r, Exception))
+    failed   = sum(1 for r in results if isinstance(r, Exception))
+
+    return {
+        "status":  "queued",
+        "folder":  str(folder),
+        "domain":  req.domain,
+        "total":   len(tasks),
+        "success": success,
+        "failed":  failed,
+    }
 
 
 if __name__ == "__main__":

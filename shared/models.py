@@ -148,3 +148,10 @@ class IngestStatusResponse(BaseModel):
     task_id: str
     status: str
     message: str = ""
+
+
+class LocalIngestRequest(BaseModel):
+    """POST /ingest/local — ingest files from a local folder path (dev only)."""
+    folder_path: str           # absolute or relative path on your laptop
+    domain: Domain  = Domain.HR
+    recursive: bool = True

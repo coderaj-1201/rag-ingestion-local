@@ -59,7 +59,29 @@ uvicorn agents.embedding_agent:app --port 8012 --reload
 
 ---
 
-## Test: Manual folder ingest
+## Test: Ingest a local folder from your laptop
+
+```bash
+# Point at any folder on your machine — no SharePoint needed
+curl -X POST http://localhost:8010/ingest/local \
+  -H "Content-Type: application/json" \
+  -d '{
+    "folder_path": "C:/Users/rajdeepc/Documents/test-docs",
+    "domain": "hr",
+    "recursive": true
+  }'
+# Linux/Mac path example: "/home/raj/docs/hr-policies"
+```
+
+Supported file types: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`
+
+The files are uploaded to your Azure Blob Storage (`raw-documents/hr/`) and then
+processed through the normal Processing → Embedding pipeline via Service Bus.
+Check Terminal 2 and Terminal 3 for live processing logs.
+
+---
+
+## Test: Manual SharePoint folder ingest
 
 ```bash
 # Trigger ingest of a SharePoint folder
