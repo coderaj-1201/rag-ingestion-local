@@ -1,17 +1,16 @@
 """
-Azure client factories for the ingestion pipeline.
-- Foundry + Blob + Service Bus: fully keyless (Managed Identity / CLI)
-- Document Intelligence + AI Search: API key (keyless not universally available for DI)
+Azure client factories — LOCAL DEV version.
+Uses AzureCliCredential everywhere (run `az login` once before starting).
+No Managed Identity, no Key Vault.
 """
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.projects import AIProjectClient
 from azure.core.credentials import AzureKeyCredential
-from azure.identity import AzureCliCredential, ManagedIdentityCredential
+from azure.identity import AzureCliCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.servicebus import ServiceBusClient
@@ -22,8 +21,6 @@ from shared.config import settings
 
 
 def _credential():
-    if os.getenv("RUNNING_IN_AZURE"):
-        return ManagedIdentityCredential()
     return AzureCliCredential()
 
 
@@ -54,7 +51,6 @@ def get_document_intelligence_client() -> DocumentIntelligenceClient:
 
 @lru_cache(maxsize=1)
 def get_blob_service_client() -> BlobServiceClient:
-    """Sync blob client for non-async contexts. Use AsyncBlobClient directly in agents."""
     return BlobServiceClient(
         account_url=f"https://{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
         credential=_credential(),
@@ -83,17 +79,12 @@ def get_search_index_client() -> SearchIndexClient:
 
 
 def get_service_bus_client() -> ServiceBusClient:
-    """New instance per use — context manager. Prefers keyless auth."""
-    if os.getenv("RUNNING_IN_AZURE"):
-        return ServiceBusClient(
-            fully_qualified_namespace=settings.AZURE_SERVICE_BUS_NAMESPACE,
-            credential=ManagedIdentityCredential(),
-        )
+    """New instance per use — context manager."""
     if settings.AZURE_SERVICE_BUS_CONNECTION_STR:
         return ServiceBusClient.from_connection_string(
             settings.AZURE_SERVICE_BUS_CONNECTION_STR.get_secret_value()
         )
     return ServiceBusClient(
         fully_qualified_namespace=settings.AZURE_SERVICE_BUS_NAMESPACE,
-        credential=AzureCliCredential(),
+        credential=_credential(),
     )

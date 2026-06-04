@@ -47,10 +47,9 @@ _SEARCH_BATCH_SIZE = 100   # upload this many docs per Search call
 # ── Blob helper ───────────────────────────────────────────────────────────────
 
 async def _download_processed_chunks(blob_path: str) -> list[RawChunk]:
-    from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
+    from azure.identity.aio import AzureCliCredential
     credential = (
-        ManagedIdentityCredential() if os.getenv("RUNNING_IN_AZURE")
-        else AzureCliCredential()
+        AzureCliCredential()
     )
     async with AsyncBlobClient(
         account_url=f"https://{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
@@ -231,14 +230,13 @@ async def embedding_workflow(task: dict) -> dict:
 
 async def _sb_listener():
     logger.info("Embedding Agent SB listener starting on queue '%s'", settings.SB_QUEUE_EMBEDDING)
-    from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
+    from azure.identity.aio import AzureCliCredential
     from azure.servicebus.aio import ServiceBusClient as AsyncSBClient
 
     while True:
         try:
             credential = (
-                ManagedIdentityCredential() if os.getenv("RUNNING_IN_AZURE")
-                else AzureCliCredential()
+                AzureCliCredential()
             )
             if settings.AZURE_SERVICE_BUS_CONNECTION_STR:
                 sb = AsyncSBClient.from_connection_string(

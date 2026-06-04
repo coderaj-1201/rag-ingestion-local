@@ -41,10 +41,9 @@ logger = get_logger(__name__)
 # ── Blob helpers ──────────────────────────────────────────────────────────────
 
 async def _get_blob_client() -> AsyncBlobClient:
-    from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
+    from azure.identity.aio import AzureCliCredential
     credential = (
-        ManagedIdentityCredential() if os.getenv("RUNNING_IN_AZURE")
-        else AzureCliCredential()
+        AzureCliCredential()
     )
     return AsyncBlobClient(
         account_url=f"https://{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
@@ -147,13 +146,12 @@ async def _sb_listener():
     """Consume processing-tasks queue continuously."""
     logger.info("Processing Agent SB listener starting on queue '%s'", settings.SB_QUEUE_PROCESSING)
     from azure.servicebus.aio import ServiceBusClient as AsyncSBClient
-    from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
+    from azure.identity.aio import AzureCliCredential
 
     while True:
         try:
             credential = (
-                ManagedIdentityCredential() if os.getenv("RUNNING_IN_AZURE")
-                else AzureCliCredential()
+                AzureCliCredential()
             )
             if settings.AZURE_SERVICE_BUS_CONNECTION_STR:
                 sb = AsyncSBClient.from_connection_string(

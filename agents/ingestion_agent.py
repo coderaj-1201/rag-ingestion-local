@@ -60,11 +60,10 @@ _delta_tokens: dict[str, str] = {}
 
 async def _upload_to_blob(blob_path: str, data: bytes) -> None:
     """Upload raw file bytes to raw-documents container."""
-    from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
+    from azure.identity.aio import AzureCliCredential
 
     credential = (
-        ManagedIdentityCredential() if os.getenv("RUNNING_IN_AZURE")
-        else AzureCliCredential()
+        AzureCliCredential()
     )
     async with AsyncBlobClient(
         account_url=f"https://{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
